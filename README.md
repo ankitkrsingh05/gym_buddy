@@ -62,4 +62,9 @@ Key logic lives in:
 - `src/lib/nutrition.ts`: calorie and macro targets, the calorie model that learns from your data, forecast, food advice
 - `src/lib/pose.ts`: body-shape metrics from photos
 - `src/lib/sync.ts`: Supabase sync (last-write-wins, works offline)
-# gym_buddy
+
+## Deployment
+
+- Repo: [ankitkrsingh05/gym_buddy](https://github.com/ankitkrsingh05/gym_buddy). Every push to `main` deploys automatically to Vercel (project `gainlab-planner`).
+- Live: https://gainlab-planner.vercel.app
+- Server env vars (Vercel → Settings → Environment Variables): `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `GEMINI_API_KEY` (sensitive), `ALLOWED_EMAILS`.
