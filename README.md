@@ -62,3 +62,4 @@ Key logic lives in:
 - `src/lib/nutrition.ts`: calorie and macro targets, the calorie model that learns from your data, forecast, food advice
 - `src/lib/pose.ts`: body-shape metrics from photos
 - `src/lib/sync.ts`: Supabase sync (last-write-wins, works offline)
+# gym_buddy
