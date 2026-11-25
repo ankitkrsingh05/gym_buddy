@@ -118,6 +118,18 @@ export interface SessionExercise {
   progressionNote?: string
 }
 
+export interface RoutineItem {
+  id: string
+  phase: 'raise' | 'mobilise' | 'activate' | 'potentiate' | 'cooldown'
+  name: string
+  seconds?: number // timed item
+  reps?: string // rep-based item
+  perSide?: boolean
+  cue: string
+  image?: string // free-exercise-db id
+  exerciseId?: string // our exercise id (for ramp-up sets)
+}
+
 export interface Readiness {
   sleepHours: number
   energy: number // 1-5
@@ -143,6 +155,11 @@ export interface Session extends Base {
   startedAt: number
   endedAt?: number
   completed: boolean
+  warmup?: RoutineItem[]
+  cooldown?: RoutineItem[]
+  warmupDone?: boolean
+  cooldownDone?: boolean
+  aiTips?: string
 }
 
 export interface FoodItem extends Base {

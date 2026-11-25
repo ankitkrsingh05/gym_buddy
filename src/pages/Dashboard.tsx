@@ -1,6 +1,8 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useState } from 'react'
 import LogActivity from '../components/LogActivity'
+import MiniCalendar from '../components/MiniCalendar'
+import { motivation } from '../lib/motivation'
 import { notesForDay, trainingAdaptations } from '../lib/adapt'
 import { Link } from 'react-router-dom'
 import { Line, LineChart, ResponsiveContainer, YAxis } from 'recharts'
@@ -25,6 +27,7 @@ export default function Dashboard() {
   const todaysSession = useLiveQuery(() => db.sessions.where('date').equals(d).first(), [d])
   const photos = useLiveQuery(() => db.photos.toArray(), [], [])
   const [logAct, setLogAct] = useState(false)
+  const totalWorkouts = useLiveQuery(() => db.sessions.filter((x) => x.completed).count(), [], 0)
   if (!profile || !plan || !energy) return null
   const adapt = trainingAdaptations({ activities: energy.acts, logs: energy.logs, targetFor: energy.targetFor })
   const todayActs = energy.acts.filter((a) => a.date === d)
@@ -37,6 +40,7 @@ export default function Dashboard() {
   const ws = weeklyStats(energy.logs, energy.checkins, energy.sessions, energy.targetFor)
   const v = verdict(profile, energy.em, energy.forecast, plan, ws, photos)
   const trend = weightTrend(energy.weights).slice(-30)
+  const mot = motivation(profile, energy.sessions, energy.weights, energy.logs, energy.acts, energy.targetFor, totalWorkouts)
   const hour = new Date().getHours()
   const greet = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
   const lastPhoto = photos.filter((p) => p.pose === 'front').sort((a, b) => b.date.localeCompare(a.date))[0]
@@ -48,6 +52,14 @@ export default function Dashboard() {
         <h1 className="text-2xl font-bold">{greet}{profile.name ? `, ${profile.name}` : ''} 👋</h1>
         <p className="text-sm text-slate-400">{v.headline}</p>
       </div>
+
+      <div className="rounded-2xl border border-emerald-500/30 bg-gradient-to-br from-emerald-500/15 via-slate-900 to-sky-500/10 p-4">
+        <div className="text-lg font-bold">{mot.headline}</div>
+        <p className="mt-1 text-sm text-slate-300 italic">“{mot.line}”</p>
+        <div className="mt-3 flex flex-wrap gap-1.5">{mot.chips.map((c) => <span key={c} className="rounded-full bg-slate-950/60 px-2.5 py-1 text-xs text-slate-200">{c}</span>)}</div>
+      </div>
+
+      <MiniCalendar kg={energy.kg} targetFor={energy.targetFor} />
 
       {(!checkin || (profile.hasScale && !weighed)) && (
         <Link to="/checkin" className="block rounded-2xl border border-emerald-500/50 bg-emerald-500/10 p-4">

@@ -8,7 +8,8 @@ import { db, save } from '../db'
 import { usePlan } from '../hooks'
 import { EXERCISES } from '../lib/exercises'
 import { applySession } from '../lib/progression'
-import type { LoggedSet, Session, SessionExercise } from '../types'
+import { routineSeconds } from '../lib/routine'
+import type { LoggedSet, RoutineItem, Session, SessionExercise } from '../types'
 
 const RPE_OPTS = [
   { v: 6, label: 'Easy', sub: '4+ left' },
@@ -106,6 +107,8 @@ export default function SessionPage() {
           <ul className="space-y-1 text-sm text-slate-300">{s.adjustments.map((a, i) => <li key={i}>• {a}</li>)}</ul>
         </Card>
       )}
+      {s.warmup && s.warmup.length > 0 && <RoutineCard title="Warm-up (RAMP)" items={s.warmup} done={!!s.warmupDone} />}
+
       {summary && (
         <Card className="border-emerald-500/40 bg-emerald-500/5" title="Workout saved 🎉">
           <ul className="space-y-1 text-sm text-slate-300">
@@ -192,6 +195,8 @@ export default function SessionPage() {
         </div>
       )}
 
+      {s.cooldown && s.cooldown.length > 0 && <RoutineCard title="Cool-down stretches" items={s.cooldown} done={!!s.cooldownDone} />}
+
       <FinishSheet open={finishOpen} onClose={() => setFinishOpen(false)} onFinish={finish} />
     </div>
   )
@@ -228,5 +233,23 @@ function FinishSheet({ open, onClose, onFinish }: { open: boolean; onClose: () =
         <Button size="lg" className="w-full" onClick={() => onFinish(rpe, feeling, pain)}>Save & update my plan</Button>
       </div>
     </Sheet>
+  )
+}
+
+function RoutineCard({ title, items, done }: { title: string; items: RoutineItem[]; done: boolean }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <Card title={<span>{title} · ~{Math.round(routineSeconds(items) / 60)} min {done && <span className="text-emerald-400">✓</span>}</span>} action={<button className="text-sm text-emerald-400" onClick={() => setOpen(!open)}>{open ? 'Hide' : 'Show'}</button>}>
+      {open ? (
+        <ul className="space-y-2">
+          {items.map((it) => (
+            <li key={it.id} className="flex items-center gap-3">
+              {it.exerciseId ? <ExerciseDemo id={it.exerciseId} playing={false} className="h-12 w-14 shrink-0 rounded-lg" /> : <ExerciseDemo image={it.image} playing={false} fallback="🧘" className="h-12 w-14 shrink-0 rounded-lg" />}
+              <div className="min-w-0 text-sm"><div className="font-medium">{it.name}</div><div className="text-xs text-slate-400">{it.reps ?? `${it.seconds}s${it.perSide ? ' each side' : ''}`} · {it.cue}</div></div>
+            </li>
+          ))}
+        </ul>
+      ) : <p className="text-sm text-slate-400">{items.map((i) => i.name).join(' · ')}</p>}
+    </Card>
   )
 }

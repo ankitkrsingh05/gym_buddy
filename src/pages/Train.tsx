@@ -11,7 +11,8 @@ import { betterDay, notesForDay, planSuggestions, trainingAdaptations, type Plan
 import { alternatives, EXERCISES, MUSCLE_LABEL } from '../lib/exercises'
 import { currentWeek, generatePlan, isDeloadWeek, startWeight, targetRir } from '../lib/plan'
 import { buildSession, e1rm, readinessFromCheckin, readinessScore } from '../lib/progression'
-import { fmtDate, today } from '../lib/util'
+import { buildCooldown, buildWarmup } from '../lib/routine'
+import { addDays, fmtDate, today } from '../lib/util'
 import type { Plan, PlanSlot } from '../types'
 
 export default function Train() {
@@ -37,6 +38,10 @@ export default function Train() {
     if (active) return nav(`/play/${active.id}`)
     const r = readinessFromCheckin(checkin)
     const s = buildSession(plan!, { ...r, score: readinessScore(r) }, adapt ?? undefined)
+    const day = plan!.days[plan!.nextDayIdx % plan!.days.length]
+    const weights = Object.fromEntries(s.exercises.map((e) => [e.exerciseId, e.targetWeight]))
+    s.warmup = buildWarmup(profile!, day, weights, energy!.acts.filter((a) => a.date >= addDays(today(), -1)))
+    s.cooldown = buildCooldown(profile!, day)
     await save('sessions', s)
     nav(`/play/${s.id}`)
   }

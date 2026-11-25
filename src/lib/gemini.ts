@@ -84,3 +84,15 @@ Here is their last-7-days data:\n${summary}\n
 Write a short weekly review (max 200 words): what went well, the single biggest limiter, and 3 concrete actions for next week (food, training, recovery). Use simple language, bullet points.`,
   }], false)
 }
+
+/** Personal coaching cues for today's session (certified-trainer style), based on the user's profile and today's data. */
+export async function aiSessionTips(p: Profile, s: import('../types').Session): Promise<string> {
+  const plan = s.exercises.map((e) => `${e.exerciseId}: ${e.targetSets}x${e.targetReps} @ ${e.targetWeight}kg`).join('; ')
+  return call([{
+    text: `You are an NSCA-certified strength coach briefing your client before a session. Client: ${p.age}y ${p.sex}, ${p.heightCm} cm, ${p.experience} lifter, goal: gain lean weight (${p.targetWeightKg} kg target), ${p.jobType} job, injuries: ${p.injuries.join(', ') || 'none'}${p.healthNotes ? `, notes: ${p.healthNotes}` : ''}.
+Today: ${s.dayName}, week ${s.week}${s.deload ? ' (deload)' : ''}, readiness ${s.readiness.score}/100 (sleep ${s.readiness.sleepHours} h, energy ${s.readiness.energy}/5, soreness ${s.readiness.soreness}/5).
+Plan: ${plan}.
+Adjustments already applied: ${s.adjustments.join(' ') || 'none'}.
+Give a short pre-workout briefing: 1 focus for today, 2 technique cues for the hardest lift, 1 warm-up/mobility tip specific to this client, 1 safety note if relevant. Max 90 words, bullet points, no markdown headings, encouraging tone.`,
+  }], false)
+}

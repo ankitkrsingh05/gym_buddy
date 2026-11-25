@@ -5,10 +5,14 @@ import ExerciseDemo from '../components/ExerciseDemo'
 import { Button, cx, Ring, Stepper } from '../components/ui'
 import { db, save } from '../db'
 import { EXERCISES } from '../lib/exercises'
+import { aiEnabled, aiSessionTips } from '../lib/gemini'
+import { routineSeconds } from '../lib/routine'
 import { getSettings, setSettings } from '../lib/settings'
-import type { Session } from '../types'
+import type { RoutineItem, Session } from '../types'
 
-type Phase = 'ready' | 'work' | 'log' | 'rest' | 'done'
+type Phase = 'ready' | 'warmup' | 'work' | 'log' | 'rest' | 'cooldown' | 'done'
+
+const PHASE_LABEL: Record<RoutineItem['phase'], string> = { raise: 'Raise heart rate', mobilise: 'Dynamic stretch', activate: 'Activate', potentiate: 'Ramp-up set', cooldown: 'Cool-down stretch' }
 type Pos = { ei: number; si: number }
 
 const EFFORT = [
@@ -64,6 +68,11 @@ export default function Player() {
   const [settings, setLocal] = useState(getSettings())
   const [log, setLog] = useState({ reps: 0, weight: 0, rpe: 8 })
   const [showCues, setShowCues] = useState(false)
+  const [ri, setRi] = useState(0) // routine item index (warm-up / cool-down)
+  const [side, setSide] = useState(0) // 0 = left, 1 = right for per-side stretches
+  const onZero = useRef<() => void>(() => {})
+  const [tipsBusy, setTipsBusy] = useState(false)
+  const [tipsErr, setTipsErr] = useState('')
 
   // Load once
   useEffect(() => {
@@ -71,7 +80,12 @@ export default function Player() {
     setS(stored)
     const p = firstOpen(stored, new Set())
     setPos(p)
-    if (!p) setPhase('done')
+    if (!p) {
+      if (stored.cooldown?.length && !stored.cooldownDone) {
+        setPhase('cooldown')
+        if (stored.cooldown[0].seconds) { setTimerTotal(stored.cooldown[0].seconds); setTimerEnd(Date.now() + stored.cooldown[0].seconds * 1000) }
+      } else setPhase('done')
+    }
   }, [stored, s])
 
   // Keep the screen awake during the workout
@@ -91,7 +105,9 @@ export default function Player() {
   }, [])
 
   const left = paused ? pausedLeft : Math.max(0, (timerEnd - now) / 1000)
-  const timed = phase === 'ready' || phase === 'rest'
+  const routineList = phase === 'cooldown' ? s?.cooldown ?? [] : s?.warmup ?? []
+  const item = phase === 'warmup' || phase === 'cooldown' ? routineList[ri] : undefined
+  const timed = phase === 'ready' || phase === 'rest' || !!item?.seconds
 
   // Countdown beeps + phase change when the timer hits zero
   useEffect(() => {
@@ -102,9 +118,9 @@ export default function Player() {
       lastBeep.current = 0
       beep(990, 400)
       navigator.vibrate?.([200, 100, 200])
-      if (phase === 'ready' || settings.autoAdvance) setPhase('work')
+      onZero.current()
     }
-  }, [left, timed, paused, phase, settings.autoAdvance])
+  }, [left, timed, paused, phase])
 
   const ex = s && pos ? s.exercises[pos.ei] : null
   const meta = ex ? EXERCISES[ex.exerciseId] : null
@@ -136,6 +152,56 @@ export default function Player() {
     setTimerTotal((t) => Math.max(1, t + delta))
     if (lastBeep.current === 0 && delta > 0) lastBeep.current = -1
   }
+  function beginItem(list: RoutineItem[], i: number, sd = 0) {
+    setRi(i)
+    setSide(sd)
+    const it = list[i]
+    if (it?.seconds) startTimer(it.seconds)
+  }
+  async function patch(p: Partial<Session>, base = s!) {
+    const n = { ...base, ...p }
+    setS(n)
+    await save('sessions', n)
+    return n
+  }
+  function startMain() {
+    if (s!.warmup?.length && !s!.warmupDone && doneSets === 0) {
+      setPhase('warmup')
+      beginItem(s!.warmup, 0)
+    } else setPhase('work')
+  }
+  async function afterLastSet(base: Session) {
+    if (base.cooldown?.length && !base.cooldownDone) {
+      setPhase('cooldown')
+      beginItem(base.cooldown, 0)
+    } else setPhase('done')
+  }
+  async function nextItem() {
+    const list = phase === 'cooldown' ? s!.cooldown ?? [] : s!.warmup ?? []
+    const it = list[ri]
+    if (it?.perSide && it.seconds && side === 0) { setSide(1); startTimer(it.seconds); return }
+    if (ri + 1 < list.length) return beginItem(list, ri + 1)
+    if (phase === 'warmup') { await patch({ warmupDone: true }); setPhase('work') }
+    else { await patch({ cooldownDone: true }); setPhase('done') }
+  }
+  async function skipRoutine() {
+    if (phase === 'warmup') { await patch({ warmupDone: true }); setPhase('work') }
+    else { await patch({ cooldownDone: true }); setPhase('done') }
+  }
+  async function getTips() {
+    if (!paused) togglePause()
+    setTipsBusy(true); setTipsErr('')
+    try {
+      const prof = await db.profile.get('me')
+      if (prof) await patch({ aiTips: await aiSessionTips(prof, s!) })
+    } catch (e: any) { setTipsErr(e.message) } finally { setTipsBusy(false) }
+  }
+  onZero.current = () => {
+    if (phase === 'ready') startMain()
+    else if (phase === 'rest') { if (settings.autoAdvance) setPhase('work') }
+    else if (phase === 'warmup' || phase === 'cooldown') nextItem()
+  }
+
   function openLog() {
     const set = ex!.sets[pos!.si]
     setLog({ reps: set.reps, weight: set.weight, rpe: set.rpe })
@@ -149,7 +215,7 @@ export default function Player() {
     setS(nextS)
     await save('sessions', nextS)
     const p = firstOpen(nextS, skipped)
-    if (!p) { setPhase('done'); beep(990, 600); return }
+    if (!p) { beep(990, 600); afterLastSet(nextS); return }
     const rest = EXERCISES[e.exerciseId].compound ? settings.restCompound : settings.restIsolation
     setPos(p)
     startTimer(rest)
@@ -159,7 +225,7 @@ export default function Player() {
     const sk = new Set(skipped).add(pos!.ei)
     setSkipped(sk)
     const p = firstOpen(s!, sk)
-    if (!p) return setPhase('done')
+    if (!p) { afterLastSet(s!); return }
     setPos(p)
     setPhase('work')
   }
@@ -186,9 +252,42 @@ export default function Player() {
           <div className="flex h-full flex-col items-center justify-center gap-5 text-center">
             <div className="text-sm tracking-widest text-slate-400 uppercase">Get ready</div>
             <Ring value={left} max={timerTotal} size={180} stroke={12}><div className="text-6xl font-extrabold tabular-nums">{Math.ceil(left)}</div></Ring>
-            <ExerciseDemo id={ex.exerciseId} className="h-40 w-56 rounded-2xl" />
-            <div><div className="text-xl font-bold">{meta.name}</div><div className="text-slate-400">First up · {s.dayName}</div></div>
-            <Button variant="soft" onClick={() => setPhase('work')}>Start now</Button>
+            {s.warmup?.length && !s.warmupDone && doneSets === 0 ? (
+              <>
+                <ExerciseDemo image={s.warmup[0].image} fallback="🔥" className="h-40 w-56 rounded-2xl" />
+                <div><div className="text-xl font-bold">Warm-up first · ~{Math.round(routineSeconds(s.warmup) / 60)} min</div><div className="text-slate-400">{s.warmup.length} moves to prepare for {s.dayName}</div></div>
+              </>
+            ) : (
+              <>
+                <ExerciseDemo id={ex.exerciseId} className="h-40 w-56 rounded-2xl" />
+                <div><div className="text-xl font-bold">{meta.name}</div><div className="text-slate-400">First up · {s.dayName}</div></div>
+              </>
+            )}
+            {s.aiTips && <div className="w-full max-w-lg rounded-2xl border border-violet-500/40 bg-violet-500/5 p-3 text-left text-sm whitespace-pre-wrap text-slate-200">{s.aiTips}</div>}
+            <div className="flex gap-2">
+              {aiEnabled() && !s.aiTips && <Button variant="ghost" disabled={tipsBusy} onClick={getTips}>{tipsBusy ? 'Asking coach…' : '✨ AI coach tips'}</Button>}
+              <Button variant="soft" onClick={startMain}>Start now</Button>
+            </div>
+            {tipsErr && <p className="max-w-lg text-sm text-rose-400">{tipsErr}</p>}
+          </div>
+        )}
+
+        {(phase === 'warmup' || phase === 'cooldown') && item && (
+          <div className="mx-auto max-w-lg space-y-4 pb-6">
+            {item.exerciseId
+              ? <ExerciseDemo id={item.exerciseId} playing={!paused} className="aspect-[4/3] w-full rounded-2xl" />
+              : <ExerciseDemo image={item.image} playing={!paused} fallback={phase === 'cooldown' ? '🧘' : '🔥'} className="aspect-[4/3] w-full rounded-2xl" />}
+            <div>
+              <div className="text-sm text-emerald-400">{phase === 'warmup' ? 'Warm-up' : 'Cool-down'} · {PHASE_LABEL[item.phase]} · {ri + 1}/{routineList.length}</div>
+              <h1 className="text-2xl font-extrabold">{item.name}</h1>
+              {item.reps && <div className="mt-1 text-lg font-semibold">{item.reps}</div>}
+              {item.perSide && item.seconds && <div className="mt-1 text-lg font-semibold text-sky-300">{side === 0 ? 'Left side' : 'Right side'}</div>}
+              <p className="mt-1 text-slate-300">{item.cue}</p>
+            </div>
+            {item.seconds && (
+              <div className="flex justify-center"><Ring value={left} max={timerTotal} size={150} stroke={10} color={phase === 'cooldown' ? '#a78bfa' : '#f59e0b'}><div className="text-4xl font-extrabold tabular-nums">{left >= 60 ? mmss(Math.ceil(left)) : Math.ceil(left)}</div></Ring></div>
+            )}
+            {routineList[ri + 1] && <div className="text-sm text-slate-500">Next: {routineList[ri + 1].name}</div>}
           </div>
         )}
 
@@ -265,7 +364,7 @@ export default function Player() {
           <div className="flex h-full flex-col items-center justify-center gap-4 text-center">
             <div className="text-6xl">🎉</div>
             <h1 className="text-2xl font-extrabold">Workout complete</h1>
-            <p className="text-slate-400">{doneSets} sets in {mmss(elapsed)}. Rate how it felt so your next session adapts.</p>
+            <p className="text-slate-400">{doneSets} sets in {mmss(elapsed)}{s.cooldownDone ? ' + cool-down stretches' : ''}. Rate how it felt so your next session adapts.</p>
             <Button size="lg" onClick={() => nav(`/session/${s.id}?finish=1`)}>Rate & finish</Button>
           </div>
         )}
@@ -275,6 +374,8 @@ export default function Player() {
       {phase !== 'done' && (
         <div className="flex items-center gap-2 border-t border-slate-800 px-4 py-3">
           <Button variant="soft" onClick={togglePause}>{paused ? '▶ Resume' : '⏸ Pause'}</Button>
+          {(phase === 'warmup' || phase === 'cooldown') && <Button variant="ghost" onClick={skipRoutine}>Skip {phase === 'warmup' ? 'warm-up' : 'stretches'}</Button>}
+          {(phase === 'warmup' || phase === 'cooldown') && <Button className="ml-auto" size="lg" disabled={paused} onClick={nextItem}>{item?.seconds ? 'Next →' : '✓ Done'}</Button>}
           {phase === 'work' && <Button variant="ghost" onClick={skipExercise}>Skip exercise</Button>}
           {phase === 'rest' && <Button variant="ghost" onClick={() => setPhase('work')}>Skip rest</Button>}
           {phase === 'work' && <Button className="ml-auto" size="lg" disabled={paused} onClick={openLog}>✓ Done</Button>}

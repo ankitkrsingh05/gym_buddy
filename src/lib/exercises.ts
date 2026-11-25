@@ -225,7 +225,11 @@ const IMAGE_IDS: Record<string, string> = {
 
 export function exerciseImages(id: string): string[] {
   const img = IMAGE_IDS[id]
-  if (!img) return []
+  return img ? datasetImages(img) : []
+}
+
+/** Start/end photos for any free-exercise-db id (stretches, warm-ups). */
+export function datasetImages(img: string): string[] {
   const base = `https://cdn.jsdelivr.net/gh/yuhonas/free-exercise-db@main/exercises/${img}`
   return [`${base}/0.jpg`, `${base}/1.jpg`]
 }

@@ -8,6 +8,8 @@ A free, installable web app (a PWA that works on phone and desktop) that builds 
   - A daily readiness score (sleep, energy, soreness, stress) changes the sets, effort and load for that session. Muscles that are still sore get less volume.
   - Rating the whole workout from 1 to 10 and fatigue tracking can trigger an early deload.
   - Exercises can be swapped, and there's a rest timer, a plate calculator and an estimated 1-rep-max chart.
+- **Complete sessions**: each workout starts with a 6–10 minute warm-up built on the RAMP method that strength coaches use: Raise, Activate, Mobilise (dynamic stretches), then Potentiate (ramp-up sets of your first lift). It's tailored to the day's muscles, your injuries and yesterday's activities. Sessions end with static stretches for what you trained, plus desk-posture stretches and breathing. An optional AI coach gives a pre-workout briefing.
+- **Home**: a motivation card (streaks, personal bests, weekly progress, a daily line) and a week/month calendar showing workouts, calories eaten vs target, and calories burned per day.
 - **Nutrition**: food search covers about 110 built-in foods (Indian and general), USDA, Open Food Facts and barcode scanning. You can also describe or photograph a meal and AI estimates it (Gemini, optional).
   - Calorie and macro targets **learn your real maintenance** by comparing what you ate with your weight trend.
   - "Close the gap" suggestions, coaching notes (protein, junk food, sugar, fried food, fibre, 2-meal days) and a "what to avoid" list.
