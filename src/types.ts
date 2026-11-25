@@ -215,6 +215,8 @@ export interface Activity extends Base {
   minutes: number
   intensity: 'light' | 'moderate' | 'vigorous'
   kcal: number
+  distanceKm?: number
+  feel?: 'easy' | 'good' | 'tough' | 'exhausting'
   notes?: string
 }
 

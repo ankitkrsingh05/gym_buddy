@@ -21,19 +21,7 @@ export function stepsKcal(steps: number, kg: number) {
   return Math.max(0, steps - 3000) * 0.00057 * kg
 }
 
-export const MET: Record<string, number> = {
-  'Walking (casual)': 3.0, 'Walking (brisk)': 4.3, 'Running': 9.0, 'Cycling': 7.0, 'Swimming': 7.0,
-  'Cricket': 5.0, 'Football': 7.0, 'Badminton': 5.5, 'Basketball': 6.5, 'Tennis': 7.3, 'Table tennis': 4.0,
-  'Yoga': 2.5, 'Stretching': 2.3, 'Dancing': 5.0, 'Hiking': 6.0, 'Stairs': 8.0, 'Household chores': 3.0,
-  'HIIT': 8.0, 'Martial arts': 10.0, 'Skipping rope': 11.0, 'Other': 4.0,
-}
-const INTENSITY_MULT = { light: 0.8, moderate: 1, vigorous: 1.25 }
-
-/** Net kcal above resting for an activity (MET − 1) × kg × hours */
-export function activityKcal(type: string, minutes: number, intensity: Activity['intensity'], kg: number) {
-  const met = (MET[type] ?? 4) * INTENSITY_MULT[intensity]
-  return Math.round((met - 1) * kg * (minutes / 60))
-}
+export { activityKcal } from './activities'
 
 export function workoutKcal(s: Session, kg: number) {
   const mins = s.endedAt ? (s.endedAt - s.startedAt) / 60000 : 50

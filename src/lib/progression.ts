@@ -1,4 +1,5 @@
 import type { CheckIn, ExerciseState, Muscle, Plan, Readiness, Session, SessionExercise } from '../types'
+import { notesForDay, type TrainingAdapt } from './adapt'
 import { EXERCISES } from './exercises'
 import { currentWeek, isDeloadWeek, targetRir, weekSetBonus } from './plan'
 import { avg, clamp, round, today, uid } from './util'
@@ -32,7 +33,7 @@ const plateRound = (w: number, inc: number) => (inc <= 0 ? 0 : round(w, inc >= 2
  * Build today's prescription from the plan + readiness.
  * Adjusts sets/effort/weight for: mesocycle week, deload, low readiness, still-sore muscles, recovery history.
  */
-export function buildSession(plan: Plan, readiness: Readiness): Session {
+export function buildSession(plan: Plan, readiness: Readiness, adapt?: TrainingAdapt): Session {
   const day = plan.days[plan.nextDayIdx % plan.days.length]
   const deload = isDeloadWeek(plan)
   let rir = targetRir(plan)
@@ -54,6 +55,10 @@ export function buildSession(plan: Plan, readiness: Readiness): Session {
   } else if (readiness.score >= 85) {
     adjustments.push(`Great readiness (${readiness.score}/100) — push for the top of your rep ranges today.`)
   }
+  if (adapt && !deload) {
+    rir += adapt.rirDelta
+    adjustments.push(...notesForDay(adapt, plan, plan.nextDayIdx))
+  }
 
   const exercises: SessionExercise[] = day.slots.map((slot) => {
     const ex = EXERCISES[slot.exerciseId]
@@ -63,6 +68,11 @@ export function buildSession(plan: Plan, readiness: Readiness): Session {
     if (readiness.soreMuscles.includes(ex.primary) && !deload) {
       sets -= 1
       note = `${ex.primary} still sore → 1 set less today`
+    }
+    if (adapt && !deload) {
+      const md = adapt.muscleDelta[ex.primary] ?? 0
+      if (md) { sets += md; note = note ?? `Trimmed ${-md} set${md < -1 ? 's' : ''} — this muscle worked hard in another activity recently` }
+      if (!ex.compound) sets += adapt.isolationDelta
     }
     if (deload) sets = Math.ceil(slot.sets / 2)
     sets = clamp(sets, 1, 6)

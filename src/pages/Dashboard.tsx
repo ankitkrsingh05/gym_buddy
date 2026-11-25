@@ -1,7 +1,10 @@
 import { useLiveQuery } from 'dexie-react-hooks'
+import { useState } from 'react'
+import LogActivity from '../components/LogActivity'
+import { notesForDay, trainingAdaptations } from '../lib/adapt'
 import { Link } from 'react-router-dom'
 import { Line, LineChart, ResponsiveContainer, YAxis } from 'recharts'
-import { AdviceList, Bar, Button, Card, Pill, Ring } from '../components/ui'
+import { AdviceList, Bar, Button, Card, Pill, Ring, Sheet } from '../components/ui'
 import { db } from '../db'
 import { useEnergy, usePlan, useProfile } from '../hooks'
 import { EXERCISES } from '../lib/exercises'
@@ -21,7 +24,10 @@ export default function Dashboard() {
   const logs = useLiveQuery(() => db.foodLogs.where('date').equals(d).toArray(), [d], [])
   const todaysSession = useLiveQuery(() => db.sessions.where('date').equals(d).first(), [d])
   const photos = useLiveQuery(() => db.photos.toArray(), [], [])
+  const [logAct, setLogAct] = useState(false)
   if (!profile || !plan || !energy) return null
+  const adapt = trainingAdaptations({ activities: energy.acts, logs: energy.logs, targetFor: energy.targetFor })
+  const todayActs = energy.acts.filter((a) => a.date === d)
 
   const t = totals(logs)
   const target = energy.targetFor(d)
@@ -72,6 +78,7 @@ export default function Dashboard() {
               <div className="text-lg font-bold">{next.name}</div>
               <div className="line-clamp-2 text-sm text-slate-400">{next.slots.map((s) => EXERCISES[s.exerciseId].name).join(' · ')}</div>
               {score !== null && <div className="mt-1 text-sm">Readiness: <b className={score >= 60 ? 'text-emerald-400' : score >= 40 ? 'text-amber-400' : 'text-rose-400'}>{score}/100</b></div>}
+              {(() => { const n = notesForDay(adapt, plan, plan.nextDayIdx); return n.length > 0 && <div className="mt-2 text-xs text-sky-300">↻ Adapted: {n[0]}{n.length > 1 ? ` (+${n.length - 1} more)` : ''}</div> })()}
               <Link to="/train"><Button className="mt-3 w-full">{todaysSession ? 'Resume' : 'Go to workout'}</Button></Link>
             </>
           )}
@@ -98,12 +105,17 @@ export default function Dashboard() {
         <Link to="/progress" className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
           <div className="text-2xl">📸</div><div className="font-semibold">Progress photo</div><div className="text-xs text-slate-400">{photoDue ? 'Not taken today' : 'Done today ✓'}</div>
         </Link>
-        <Link to="/activity" className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
-          <div className="text-2xl">🚶</div><div className="font-semibold">Activity</div><div className="text-xs text-slate-400">{checkin ? `${checkin.steps.toLocaleString()} steps` : 'Log steps & sports'}</div>
-        </Link>
+        <button onClick={() => setLogAct(true)} className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 text-left">
+          <div className="text-2xl">🏊</div><div className="font-semibold">Log activity</div>
+          <div className="text-xs text-slate-400">{todayActs.length ? `${todayActs.length} today · ${todayActs.reduce((x, a) => x + a.kcal, 0)} kcal` : 'Swim, yoga, sports, walks'}</div>
+        </button>
       </div>
 
       <Card title="Coach"><AdviceList items={v.insights.slice(0, 4)} /></Card>
+
+      <Sheet open={logAct} onClose={() => setLogAct(false)} title="Log activity">
+        {logAct && <LogActivity date={d} kg={energy.kg} onDone={() => setLogAct(false)} />}
+      </Sheet>
     </div>
   )
 }

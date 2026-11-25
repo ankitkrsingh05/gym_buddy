@@ -2,28 +2,28 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Bar as RBar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { Button, Card, Empty, Field, NumInput, Segmented } from '../components/ui'
-import { db, remove, save } from '../db'
+import LogActivity from '../components/LogActivity'
+import { Button, Card, Empty, Sheet } from '../components/ui'
+import { db, remove } from '../db'
 import { useEnergy, useProfile } from '../hooks'
-import { activityKcal, MET, stepsKcal, workoutKcal } from '../lib/nutrition'
-import { addDays, fmtDate, today, uid } from '../lib/util'
-import type { Activity as A } from '../types'
+import { activityDef } from '../lib/activities'
+import { stepsKcal, workoutKcal } from '../lib/nutrition'
+import { addDays, fmtDate, today } from '../lib/util'
 
 export default function Activity() {
   const profile = useProfile()
   const energy = useEnergy(profile)
   const [date, setDate] = useState(today())
-  const [type, setType] = useState('Walking (brisk)')
-  const [minutes, setMinutes] = useState(30)
-  const [intensity, setIntensity] = useState<A['intensity']>('moderate')
+  const [adding, setAdding] = useState(false)
   const list = useLiveQuery(() => db.activities.where('date').equals(date).toArray(), [date], [])
   const checkin = useLiveQuery(() => db.checkins.get(date), [date])
   const workouts = useLiveQuery(() => db.sessions.where('date').equals(date).toArray(), [date], [])
+  const weekActs = useLiveQuery(() => db.activities.where('date').aboveOrEqual(addDays(today(), -6)).toArray(), [], [])
   if (!profile || !energy) return null
   const kg = energy.kg
-  const est = activityKcal(type, minutes, intensity, kg)
 
   const week = Array.from({ length: 7 }, (_, i) => addDays(today(), i - 6)).map((d) => ({ day: fmtDate(d, { weekday: 'short' }), kcal: Math.round(energy.extras[d] ?? 0) }))
+  const byType = Object.entries(weekActs.reduce<Record<string, number>>((m, a) => { const n = activityDef(a.type).name; m[n] = (m[n] ?? 0) + a.minutes; return m }, {})).sort((a, b) => b[1] - a[1])
 
   return (
     <div className="space-y-4">
@@ -33,31 +33,24 @@ export default function Activity() {
         <button className="px-3 text-xl text-slate-400 disabled:opacity-20" disabled={date >= today()} onClick={() => setDate(addDays(date, 1))}>›</button>
       </div>
 
-      <Card title="Today's burn (above resting)">
-        <ul className="space-y-1.5 text-sm">
-          <li className="flex justify-between"><span>Steps: {checkin?.steps ?? '—'} <Link to={`/checkin?date=${date}`} className="text-emerald-400">edit</Link></span><span>{checkin ? Math.round(stepsKcal(checkin.steps, kg)) : 0} kcal</span></li>
-          {workouts.filter((w) => w.completed).map((w) => <li key={w.id} className="flex justify-between text-slate-400"><span>Gym: {w.dayName} (in baseline)</span><span>≈{workoutKcal(w, kg)} kcal</span></li>)}
-          {list.map((a) => (
-            <li key={a.id} className="flex justify-between"><span>{a.type} · {a.minutes} min · {a.intensity}</span><span className="flex gap-2">{a.kcal} kcal <button className="text-slate-500" onClick={() => remove('activities', a.id)}>×</button></span></li>
-          ))}
+      <Button size="lg" className="w-full" onClick={() => setAdding(true)}>+ Log swimming, yoga, sports…</Button>
+
+      <Card title="Burn above resting">
+        <ul className="space-y-2 text-sm">
+          <li className="flex justify-between"><span>👣 Steps: {checkin?.steps?.toLocaleString() ?? '—'} <Link to={`/checkin?date=${date}`} className="text-emerald-400">edit</Link></span><span>{checkin ? Math.round(stepsKcal(checkin.steps, kg)) : 0} kcal</span></li>
+          {workouts.filter((w) => w.completed).map((w) => <li key={w.id} className="flex justify-between text-slate-400"><span>🏋️ Gym: {w.dayName} (in baseline)</span><span>≈{workoutKcal(w, kg)} kcal</span></li>)}
+          {list.map((a) => {
+            const d = activityDef(a.type)
+            return (
+              <li key={a.id} className="flex items-start justify-between gap-2">
+                <span>{d.icon} {a.type} · {a.minutes} min · {a.intensity}{a.distanceKm ? ` · ${a.distanceKm} km` : ''}{a.feel ? ` · felt ${a.feel}` : ''}{a.notes ? <span className="block text-xs text-slate-500">{a.notes}</span> : null}</span>
+                <span className="flex shrink-0 gap-2">{a.kcal} kcal <button className="text-slate-500" onClick={() => remove('activities', a.id)}>×</button></span>
+              </li>
+            )
+          })}
           {!checkin && !list.length && !workouts.length && <Empty>Nothing logged yet.</Empty>}
         </ul>
-        <p className="mt-3 text-xs text-slate-500">Steps and sports are added to that day's food target automatically. Gym workouts are already spread evenly across your week's baseline, so rest days still get enough food to grow.</p>
-      </Card>
-
-      <Card title="Add activity">
-        <div className="space-y-3">
-          <Field label="Type">
-            <select className="w-full rounded-xl border border-slate-700 bg-slate-950 p-2.5" value={type} onChange={(e) => setType(e.target.value)}>
-              {Object.keys(MET).map((k) => <option key={k}>{k}</option>)}
-            </select>
-          </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Minutes"><NumInput value={minutes} step={5} onChange={setMinutes} /></Field>
-            <Field label="Intensity"><Segmented value={intensity} onChange={setIntensity} options={[{ value: 'light', label: 'Light' }, { value: 'moderate', label: 'Mod' }, { value: 'vigorous', label: 'Hard' }]} /></Field>
-          </div>
-          <Button className="w-full" disabled={!minutes} onClick={() => save('activities', { id: uid(), updatedAt: 0, date, type, minutes, intensity, kcal: est })}>Add · ≈{est} kcal</Button>
-        </div>
+        <p className="mt-3 text-xs text-slate-500">Activities add to that day's food target and can lighten your next gym session for the muscles they worked. Gym workouts are already spread across your weekly baseline.</p>
       </Card>
 
       <Card title="Last 7 days">
@@ -72,9 +65,18 @@ export default function Activity() {
             </BarChart>
           </ResponsiveContainer>
         </div>
-        {profile.device === 'iphone' && <p className="mt-2 text-xs text-slate-500">Tip: open the Health app → Steps to copy today's count into your check-in. Automatic Apple Health sync needs a native app (possible later).</p>}
-        {profile.device === 'android' && <p className="mt-2 text-xs text-slate-500">Tip: copy today's steps from Google Fit / Samsung Health / Health Connect into your check-in.</p>}
+        {byType.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {byType.map(([n, m]) => <span key={n} className="rounded-full bg-slate-800 px-2.5 py-1 text-xs">{activityDef(n).icon} {n} · {m} min</span>)}
+          </div>
+        )}
+        {profile.device === 'iphone' && <p className="mt-2 text-xs text-slate-500">Tip: copy today's steps from the Health app into your check-in.</p>}
+        {profile.device === 'android' && <p className="mt-2 text-xs text-slate-500">Tip: copy today's steps from Google Fit / Samsung Health into your check-in.</p>}
       </Card>
+
+      <Sheet open={adding} onClose={() => setAdding(false)} title="Log activity">
+        {adding && <LogActivity date={date} kg={kg} onDone={() => setAdding(false)} />}
+      </Sheet>
     </div>
   )
 }

@@ -4,7 +4,7 @@ import AddFood, { logFromFood } from '../components/AddFood'
 import { AdviceList, Bar, Button, Card, Ring, Sheet } from '../components/ui'
 import { db, remove, save } from '../db'
 import { useEnergy, useProfile } from '../hooks'
-import { suggestions } from '../lib/foods'
+import { dayContext, habitInsights, smartSuggestions } from '../lib/adapt'
 import { AVOID_LIST, foodAdvice, intakeByDate, totals } from '../lib/nutrition'
 import { addDays, fmtDate, today } from '../lib/util'
 import type { MealSlot } from '../types'
@@ -25,7 +25,13 @@ export default function Food() {
   const t = totals(logs)
   const target = energy.targetFor(date)
   const advice = foodAdvice(profile, t, target, intakeByDate(energy.logs), date === today())
-  const sugg = suggestions(profile, target.kcal - t.kcal, target.protein - t.protein)
+  const ctx = dayContext(date, energy.sessions, energy.acts)
+  const sugg = smartSuggestions(profile, target.kcal - t.kcal, target.protein - t.protein, energy.logs, ctx, logs)
+  const habits = habitInsights(profile, energy.logs, energy.targetFor, energy.sessions, energy.acts)
+  const dayNotes = [
+    ctx.workedOut && 'Gym day',
+    ctx.activityKcal > 0 && `+${ctx.activityKcal} kcal from ${ctx.activityNames.join(', ').toLowerCase()}`,
+  ].filter(Boolean) as string[]
 
   return (
     <div className="space-y-4">
@@ -48,6 +54,7 @@ export default function Food() {
             <Bar label="Fibre" value={t.fiber} max={target.fiber} color="bg-lime-500" />
           </div>
         </div>
+        {dayNotes.length > 0 && <div className="mt-3 flex flex-wrap gap-2">{dayNotes.map((n) => <span key={n} className="rounded-full bg-emerald-500/15 px-2.5 py-1 text-xs text-emerald-300">{n}</span>)}</div>}
         <p className="mt-3 text-xs text-slate-500">
           Target = maintenance {Math.round(energy.em.maintenance)}{energy.em.confidence > 0.2 ? ` (learned from your data, ${Math.round(energy.em.confidence * 100)}% confidence)` : ' (formula — learns from your logs)'} + {energy.em.surplus} surplus + today's steps/sports. Gym training is averaged into maintenance.
         </p>
@@ -84,7 +91,8 @@ export default function Food() {
           <div className="space-y-3">
             {sugg.map((s) => (
               <div key={s.title} className="rounded-xl bg-slate-800/60 p-3">
-                <div className="flex items-center justify-between"><div className="font-semibold">{s.title}</div><div className="text-sm text-slate-400">+{s.kcal} kcal · {s.protein} g P</div></div>
+                <div className="flex items-center justify-between gap-2"><div className="font-semibold">{s.title}</div><div className="shrink-0 text-sm text-slate-400">+{s.kcal} kcal · {s.protein} g P</div></div>
+                {s.why && <div className="mt-0.5 text-xs text-slate-400">{s.why}</div>}
                 <div className="mt-1 text-sm text-slate-300">{s.items.map((i) => `${i.name} (${i.serving})`).join(' + ')}</div>
                 <Button size="sm" variant="soft" className="mt-2" onClick={async () => { for (const f of s.items) await save('foodLogs', logFromFood(f, 1, date, 'snack')) }}>Log this</Button>
               </div>
@@ -94,6 +102,8 @@ export default function Food() {
       )}
 
       <Card title="Coach notes"><AdviceList items={advice} /></Card>
+
+      {habits.length > 0 && <Card title="Your eating patterns (last 4 weeks)"><AdviceList items={habits} /></Card>}
 
       <Card title="What to avoid while bulking" action={<button className="text-sm text-emerald-400" onClick={() => setShowAvoid(!showAvoid)}>{showAvoid ? 'Hide' : 'Show'}</button>}>
         {showAvoid && <ul className="space-y-1.5 text-sm text-slate-300">{AVOID_LIST.map((a) => <li key={a}>• {a}</li>)}</ul>}

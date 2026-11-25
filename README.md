@@ -15,7 +15,13 @@ A free, installable web app (a PWA that works on phone and desktop) that builds 
 - **Progress photos**: a guided camera with a ghost overlay of your last photo, a 10-second timer, slider and side-by-side comparison.
   - **On-device body-shape analysis** (MediaPipe) tracks shoulder, waist and hip width relative to torso length, so you can see whether gains look like muscle or fat.
   - Optional AI photo review.
-- **Activity**: steps, sports and cardio calories are added to that day's food target.
+- **Activity**: log about 30 activities (swimming, yoga, cricket, football, running, cycling, hiking and more) with duration, effort, distance and how it felt. Calories are added to that day's food target.
+- **Cross-adaptation** (`src/lib/adapt.ts`):
+  - Sports and cardio trim gym volume for the muscles they worked (football → fewer leg sets). The app offers to swap in a day that avoids tired muscles. Yoga and mobility count as recovery.
+  - Recent under-eating or low protein trims isolation volume and shows a warning.
+  - Habit-based plan suggestions: fewer training days if you keep missing sessions, a session length that matches reality, swaps for exercises you keep skipping, and pain follow-ups.
+  - Food suggestions adapt to what you actually eat (your staples), post-workout protein, and refuelling after sports.
+  - Pattern insights: weakest meal, weekend vs weekday eating, whether shakes help you hit your target, rest-day under-eating, food variety.
 - **Daily check-in, measurements, a whey and creatine health guide, an AI weekly coach, backup export/import, and Supabase cloud sync** (phone and web).
 
 ## Run locally
